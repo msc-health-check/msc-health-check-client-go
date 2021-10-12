@@ -19,7 +19,9 @@ const (
 	ErrorReadingResponseBody = "erro ao ler o corpo do response"
 	NotFound                 = "sem resultado"
 
-	ServicePath = "/health-check"
+	ContextPath = "health-check"
+	Host        = "https://msc-health-check.herokuapp.com"
+	//Host        = "http://localhost:5000"
 )
 
 var logger *log.Logger
@@ -35,18 +37,16 @@ type Client interface {
 	AddLiveSignal(ID, appName string) (ProjectCheck, error)
 }
 
-func NewClient(httpClient *http.Client, host string) *ClientImpl {
+func NewClient(httpClient *http.Client) *ClientImpl {
 
 	var logging = glog.NewLogging(logger)
 	return &ClientImpl{
-		Host:       host,
 		HttpClient: httpClient,
 		Logger:     logging,
 	}
 }
 
 type ClientImpl struct {
-	Host       string
 	HttpClient *http.Client
 	Logger     glog.Logging
 }
@@ -55,9 +55,8 @@ func (client *ClientImpl) executeRequest(methodRequest string, url string, jsonB
 
 	var err error
 	var request *http.Request
-	var payload *strings.Reader
 	if jsonBody != nil {
-		payload = strings.NewReader(string(jsonBody))
+		payload := strings.NewReader(string(jsonBody))
 		request, err = http.NewRequest(methodRequest, url, payload)
 	} else {
 		request, err = http.NewRequest(methodRequest, url, nil)
@@ -74,16 +73,20 @@ func (client *ClientImpl) executeRequest(methodRequest string, url string, jsonB
 
 	defer response.Body.Close()
 
-	if !is2XX(response) {
-		if response.StatusCode == 404 {
-			return nil, errors.New(NotFound)
-		}
-		return nil, errors.Wrap(err, ErrorFromAPI)
-	}
-
 	responseBody, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		return nil, errors.New(ErrorReadingResponseBody)
+	}
+
+	if !is2XX(response) {
+		switch response.StatusCode {
+		case 404:
+			return nil, errors.New(NotFound)
+		case 400:
+			return responseBody, errors.New(string(responseBody))
+		default:
+			return nil, errors.Wrap(err, ErrorFromAPI)
+		}
 	}
 
 	return responseBody, nil
@@ -94,8 +97,7 @@ func is2XX(response *http.Response) bool {
 }
 
 func (client *ClientImpl) AddService(service ProjectCheckRequest) (ProjectCheck, error) {
-	// http://localhost:8081/ara-api/comment/post/20200812BpLnf/
-	url := fmt.Sprintf("%s/%s", client.Host, ServicePath)
+	url := fmt.Sprintf("%s/%s", Host, ContextPath)
 	body, err := json.Marshal(service)
 	if err != nil {
 		return ProjectCheck{}, err
@@ -116,9 +118,8 @@ func (client *ClientImpl) AddService(service ProjectCheckRequest) (ProjectCheck,
 }
 
 func (client *ClientImpl) AddLiveSignal(ID, appName string) (ProjectCheck, error) {
-	// http://localhost:8081/ara-api/comment/post/20200812BpLnf/
-	url := fmt.Sprintf("/%s/%s/%s/%s", client.Host, ServicePath, appName, ID)
 
+	url := fmt.Sprintf("/%s/%s/%s/%s", Host, ContextPath, appName, ID)
 	responseBody, err := client.executeRequest(http.MethodPut, url, nil)
 	if err != nil {
 		return ProjectCheck{}, err
