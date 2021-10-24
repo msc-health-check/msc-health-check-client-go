@@ -24,7 +24,7 @@ func TestClientImpl_AddService(t *testing.T) {
 		{
 			Name: "adicionando ProjectCheck com sucesso",
 			ProjectCheckRequest: ProjectCheckRequest{
-				URL: "https://google.com?q=\"https://https://msc-health-check.github.io/\"",
+				URL:     "https://google.com?q=\"https://https://msc-health-check.github.io/\"",
 				AppName: uuid.NewString(),
 			},
 			ExpectError:           nil,
@@ -44,8 +44,8 @@ func TestClientImpl_AddService(t *testing.T) {
 			ExpectErrorsSize:      0,
 		},
 		{
-			Name:                  "adicionando ProjectCheck com erro: sem nome app",
-			ProjectCheckRequest:   ProjectCheckRequest{
+			Name: "adicionando ProjectCheck com erro: sem nome app",
+			ProjectCheckRequest: ProjectCheckRequest{
 				URL: "https://google.com?q=\"https://https://msc-health-check.github.io/\"",
 			},
 			ExpectError:           errors.New("{\"error\":\"informe nome do app\"}"),
@@ -56,9 +56,9 @@ func TestClientImpl_AddService(t *testing.T) {
 			ExpectErrorsSize:      0,
 		},
 		{
-			Name:                  "adicionando ProjectCheck com erro: sem protocolo http",
-			ProjectCheckRequest:   ProjectCheckRequest{
-				URL: "google.com?q=\"https://https://msc-health-check.github.io/\"",
+			Name: "adicionando ProjectCheck com erro: sem protocolo http",
+			ProjectCheckRequest: ProjectCheckRequest{
+				URL:     "google.com?q=\"https://https://msc-health-check.github.io/\"",
 				AppName: uuid.NewString(),
 			},
 			ExpectError:           errors.New("{\"error\":\"informe protocolo (http ou https)\"}"),
@@ -86,15 +86,69 @@ func TestClientImpl_AddService(t *testing.T) {
 
 			if err != nil {
 				assert.Equal(t, test.ExpectError.Error(), err.Error())
+				return
 			}
 
-			if err == nil {
-				assert.Equal(t, test.ExpectAppName, projectCheck.AppName)
-				assert.Equal(t, test.ExpectErrorsSize, len(projectCheck.Errors))
-				assert.Equal(t, test.ExpectChecksOutSize, len(projectCheck.ChecksOut))
-				assert.Equal(t, test.ExpectExistsID, len(projectCheck.ID) > 0)
-				assert.Equal(t, test.ExpectLiveSignalsSize, len(projectCheck.LiveSignals))
+			assert.Equal(t, test.ExpectAppName, projectCheck.AppName)
+			assert.Equal(t, test.ExpectErrorsSize, len(projectCheck.Errors))
+			assert.Equal(t, test.ExpectChecksOutSize, len(projectCheck.ChecksOut))
+			assert.Equal(t, test.ExpectExistsID, len(projectCheck.ID) > 0)
+			assert.Equal(t, test.ExpectLiveSignalsSize, len(projectCheck.LiveSignals))
+
+		})
+	}
+}
+
+func TestClientImpl_AddLiveSignal(t *testing.T) {
+
+	tests := []struct {
+		Name                string
+		ProjectCheckRequest ProjectCheckRequest
+		ExpectError         error
+		ExpectStatusCode    int
+	}{
+		{
+			Name: "live Signal com sucesso",
+			ProjectCheckRequest: ProjectCheckRequest{
+				URL:     "https://google.com?q=\"https://https://msc-health-check.github.io/\"",
+				AppName: uuid.NewString(),
+			},
+			ExpectError:      nil,
+			ExpectStatusCode: http.StatusAccepted,
+		},
+		{
+			Name:             "live Signal app inexiste",
+			ExpectError:      errors.New("{\"error\":\"app inexistente\"}"),
+			ExpectStatusCode: http.StatusBadRequest,
+		},
+	}
+
+	for _, test := range tests {
+
+		t.Run(test.Name, func(t *testing.T) {
+
+			var ID, appName = "123", "teste"
+			clientImpl := NewClient(&http.Client{
+				Timeout: 20 * time.Minute,
+			})
+
+			if len(test.ProjectCheckRequest.AppName) > 0 {
+
+				projectCheck, err := clientImpl.AddService(test.ProjectCheckRequest)
+				if err != nil {
+					panic(err)
+				}
+				ID = projectCheck.ID
+				appName = projectCheck.AppName
 			}
+
+			statucCode, err := clientImpl.AddLiveSignal(ID, appName)
+			if err != nil {
+				assert.Equal(t, test.ExpectError.Error(), err.Error())
+				return
+			}
+
+			assert.Equal(t, test.ExpectStatusCode, statucCode)
 
 		})
 	}

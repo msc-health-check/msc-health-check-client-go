@@ -51,7 +51,7 @@ type ClientImpl struct {
 	Logger     glog.Logging
 }
 
-func (client *ClientImpl) executeRequest(methodRequest string, url string, jsonBody []byte) ([]byte, error) {
+func (client *ClientImpl) executeRequest(methodRequest string, url string, jsonBody []byte) ([]byte, int, error) {
 
 	var err error
 	var request *http.Request
@@ -63,33 +63,33 @@ func (client *ClientImpl) executeRequest(methodRequest string, url string, jsonB
 	}
 
 	if err != nil {
-		return nil, errors.New(ErrorNewRequest)
+		return nil, http.StatusInternalServerError, errors.New(ErrorNewRequest)
 	}
 
 	response, err := client.HttpClient.Do(request)
 	if err != nil {
-		return nil, errors.New(ErrorExecuteRequest)
+		return nil, response.StatusCode, errors.New(ErrorExecuteRequest)
 	}
 
 	defer response.Body.Close()
 
 	responseBody, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, errors.New(ErrorReadingResponseBody)
+		return nil, response.StatusCode, errors.New(ErrorReadingResponseBody)
 	}
 
 	if !is2XX(response) {
 		switch response.StatusCode {
 		case 404:
-			return nil, errors.New(NotFound)
+			return nil, response.StatusCode, errors.New(NotFound)
 		case 400:
-			return responseBody, errors.New(string(responseBody))
+			return responseBody, response.StatusCode, errors.New(string(responseBody))
 		default:
-			return nil, errors.Wrap(err, ErrorFromAPI)
+			return nil, response.StatusCode, errors.Wrap(err, ErrorFromAPI)
 		}
 	}
 
-	return responseBody, nil
+	return responseBody, response.StatusCode, nil
 }
 
 func is2XX(response *http.Response) bool {
@@ -103,7 +103,7 @@ func (client *ClientImpl) AddService(service ProjectCheckRequest) (ProjectCheck,
 		return ProjectCheck{}, err
 	}
 
-	responseBody, err := client.executeRequest(http.MethodPost, url, body)
+	responseBody, _, err := client.executeRequest(http.MethodPost, url, body)
 	if err != nil {
 		return ProjectCheck{}, err
 	}
@@ -117,19 +117,13 @@ func (client *ClientImpl) AddService(service ProjectCheckRequest) (ProjectCheck,
 	return project, nil
 }
 
-func (client *ClientImpl) AddLiveSignal(ID, appName string) (ProjectCheck, error) {
+func (client *ClientImpl) AddLiveSignal(ID, appName string) (int, error) {
 
-	url := fmt.Sprintf("/%s/%s/%s/%s", Host, ContextPath, appName, ID)
-	responseBody, err := client.executeRequest(http.MethodPut, url, nil)
+	url := fmt.Sprintf("%s/%s/%s/%s", Host, ContextPath, appName, ID)
+	_, statusCode, err := client.executeRequest(http.MethodPut, url, nil)
 	if err != nil {
-		return ProjectCheck{}, err
+		return statusCode, err
 	}
 
-	var project ProjectCheck
-	err = json.Unmarshal(responseBody, &project)
-	if err != nil {
-		return ProjectCheck{}, err
-	}
-
-	return project, nil
+	return statusCode, nil
 }
